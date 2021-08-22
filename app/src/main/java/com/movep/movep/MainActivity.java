@@ -19,6 +19,10 @@ import android.widget.Button;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import com.google.android.gms.location.FusedLocationProviderClient;
+import com.google.android.gms.location.LocationServices;
+import com.google.android.gms.tasks.OnSuccessListener;
+
 import org.json.JSONArray;
 import org.json.JSONException;
 import org.json.JSONObject;
@@ -35,6 +39,7 @@ public class MainActivity extends AppCompatActivity {
     private String latitude, longitude, speed;
     private static Handler handler;
     private static boolean isRunning;
+    private FusedLocationProviderClient fusedLocationClient;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -44,6 +49,8 @@ public class MainActivity extends AppCompatActivity {
                 new String[] {Manifest.permission.ACCESS_FINE_LOCATION}, REQUEST_LOCATION);
         showLocation = findViewById(R.id.showLocation);
         btnGetLocation = findViewById(R.id.btnGetLocation);
+        fusedLocationClient = LocationServices.getFusedLocationProviderClient(this);
+
         btnGetLocation.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
@@ -100,12 +107,16 @@ public class MainActivity extends AppCompatActivity {
             ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.ACCESS_FINE_LOCATION}, REQUEST_LOCATION);
         } else {
             isRunning = true;
-            Location locationGPS = locationManager.getLastKnownLocation(LocationManager.GPS_PROVIDER);
-            if (locationGPS != null) {
-                send_location(locationGPS);
-            } else {
-                Toast.makeText(this, "Não foi possível encontrar localização.", Toast.LENGTH_SHORT).show();
-            }
+            fusedLocationClient.getLastLocation()
+                .addOnSuccessListener(this, new OnSuccessListener<Location>() {
+                    @Override
+                    public void onSuccess(Location location) {
+                        // Got last known location. In some rare situations this can be null.
+                        if (location != null) {
+                            send_location(location);
+                        }
+                    }
+                });
         }
     }
 
@@ -127,7 +138,7 @@ public class MainActivity extends AppCompatActivity {
                 + "Longitude: " + longitude + "\n" + "Vel: " + speed + "\n\n");
 
         try {
-            json = http.execute("http://sauloaislan.pythonanywhere.com/directions/5/"+latitude+"/"+longitude+"/"+speed,
+            json = http.execute("http://tocti.com.br/directions/5/"+latitude+"/"+longitude+"/"+speed,
                     "GET", "",null).get();
 
             System.out.println(json);
