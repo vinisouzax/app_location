@@ -1,5 +1,7 @@
 package com.movep.movep;
 
+import static android.content.ContentValues.TAG;
+
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.core.app.ActivityCompat;
@@ -10,18 +12,25 @@ import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.location.Location;
+import android.location.LocationListener;
 import android.location.LocationManager;
 import android.os.Bundle;
 import android.os.Handler;
+import android.os.Looper;
 import android.provider.Settings;
+import android.util.Log;
 import android.view.View;
 import android.widget.Button;
 import android.widget.TextView;
 import android.widget.Toast;
 
 import com.google.android.gms.location.FusedLocationProviderClient;
+import com.google.android.gms.location.LocationCallback;
+import com.google.android.gms.location.LocationRequest;
+import com.google.android.gms.location.LocationResult;
 import com.google.android.gms.location.LocationServices;
 import com.google.android.gms.tasks.OnSuccessListener;
+import com.google.android.gms.tasks.Task;
 
 import org.json.JSONArray;
 import org.json.JSONException;
@@ -37,9 +46,13 @@ public class MainActivity extends AppCompatActivity {
     private TextView showLocation;
     private LocationManager locationManager;
     private String latitude, longitude, speed;
-    private static Handler handler;
     private static boolean isRunning;
     private FusedLocationProviderClient fusedLocationClient;
+    private LocationRequest mLocationRequest;
+
+    private long UPDATE_INTERVAL = 10 * 1000;
+    private long FASTEST_INTERVAL = 2000;
+    private LocationCallback locationCallback;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -51,6 +64,12 @@ public class MainActivity extends AppCompatActivity {
         btnGetLocation = findViewById(R.id.btnGetLocation);
         fusedLocationClient = LocationServices.getFusedLocationProviderClient(this);
 
+        // Create the location request to start receiving updates
+        mLocationRequest = new LocationRequest();
+        mLocationRequest.setPriority(LocationRequest.PRIORITY_HIGH_ACCURACY);
+        mLocationRequest.setInterval(UPDATE_INTERVAL);
+        mLocationRequest.setFastestInterval(FASTEST_INTERVAL);
+
         btnGetLocation.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
@@ -61,27 +80,31 @@ public class MainActivity extends AppCompatActivity {
                     if(!isRunning) {
                         btnGetLocation.setText("Parar");
                         getLocation();
-                        handler.postDelayed(runnable, 10000);
                     }else{
                         btnGetLocation.setText("Iniciar");
                         isRunning = false;
-                        handler.removeCallbacks(runnable);
+                        stopLocationUpdates();
                     }
                 }
             }
         });
-        handler = new Handler();
     }
 
-    private final Runnable runnable = new Runnable() {
-        @Override
-        public void run() {
-            if (isRunning) {
-                getLocation();
-                handler.postDelayed(runnable, 10000);
+    public void stopLocationUpdates() {
+        if (fusedLocationClient != null) {
+            try {
+                final Task<Void> voidTask = fusedLocationClient.removeLocationUpdates(locationCallback);
+                if (voidTask.isSuccessful()) {
+                    Log.d(TAG,"StopLocation updates successful! ");
+                } else {
+                    Log.d(TAG,"StopLocation updates unsuccessful! " + voidTask.toString());
+                }
+            }
+            catch (SecurityException exp) {
+                Log.d(TAG, " Security exception while removeLocationUpdates");
             }
         }
-    };
+    }
 
     private void OnGPS() {
         final AlertDialog.Builder builder = new AlertDialog.Builder(this);
@@ -107,16 +130,13 @@ public class MainActivity extends AppCompatActivity {
             ActivityCompat.requestPermissions(this, new String[]{Manifest.permission.ACCESS_FINE_LOCATION}, REQUEST_LOCATION);
         } else {
             isRunning = true;
-            fusedLocationClient.getLastLocation()
-                .addOnSuccessListener(this, new OnSuccessListener<Location>() {
-                    @Override
-                    public void onSuccess(Location location) {
-                        // Got last known location. In some rare situations this can be null.
-                        if (location != null) {
-                            send_location(location);
-                        }
-                    }
-                });
+            locationCallback = new LocationCallback() {
+                @Override
+                public void onLocationResult(LocationResult locationResult) {
+                    send_location(locationResult.getLastLocation());
+                }
+            };
+            fusedLocationClient.requestLocationUpdates(mLocationRequest, locationCallback, Looper.myLooper());
         }
     }
 
